@@ -1,0 +1,88 @@
+import requests
+import time
+
+# Yetkili kullanıcı listesi
+AUTHORIZED_USERS = ["admin"]
+
+# RSI hesaplama fonksiyonu
+def rsi(prices, period=14):
+    gains, losses = [], []
+    for i in range(1, len(prices)):
+        delta = prices[i] - prices[i - 1]
+        if delta >= 0:
+            gains.append(delta)
+            losses.append(0)
+        else:
+            gains.append(0)
+            losses.append(-delta)
+    avg_gain = sum(gains[-period:]) / period
+    avg_loss = sum(losses[-period:]) / period
+    if avg_loss == 0:
+        return 100
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+# Binance API'den veri çekme
+def get_data(symbol="BTCUSDT", interval="1h", limit=50):
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    res = requests.get(url)
+    data = res.json()
+    closes = [float(i[4]) for i in data]
+    volumes = [float(i[5]) for i in data]
+    return closes, volumes
+
+# AI değerlendirme
+def analyze(symbol="BTCUSDT"):
+    try:
+        closes, volumes = get_data(symbol)
+        rsi_value = rsi(closes)
+        trend = "up" if closes[-1] > closes[0] else "down"
+        vol_change = (volumes[-1] - volumes[-5]) / volumes[-5] * 100
+
+        # AI benzeri skor
+        ai_score = 0
+        reason = []
+
+        if trend == "up":
+            ai_score += 3
+            reason.append("Trend yukarı yönlü")
+        else:
+            reason.append("Trend aşağı yönlü")
+
+        if 45 <= rsi_value <= 70:
+            ai_score += 3
+            reason.append(f"RSI dengeli: {round(rsi_value, 2)}")
+        elif rsi_value < 45:
+            ai_score += 1
+            reason.append(f"RSI düşük: {round(rsi_value, 2)}")
+
+        if vol_change > 0:
+            ai_score += 2
+            reason.append(f"Hacim artışı var: %{round(vol_change, 2)}")
+        else:
+            reason.append("Hacim düşüyor")
+
+        recommendation = "İzlenmeli" if ai_score < 5 else "Yatırım için uygun"
+        print(f"\n=== {symbol} Analizi ===")
+        print(f"AI Skoru: {ai_score}/10")
+        print("Sebep: " + " | ".join(reason))
+        print(f"Karar: {recommendation}\n")
+
+    except Exception as e:
+        print(f"Hata: {e}")
+
+# Ana kontrol fonksiyonu
+def main():
+    username = input("Kullanıcı adı: ")
+    if username not in AUTHORIZED_USERS:
+        print("Erişim reddedildi.")
+        return
+
+    symbol = input("Coin gir (örn: ETHUSDT) [Boş bırak: BTCUSDT]: ").strip().upper()
+    if symbol == "":
+        symbol = "BTCUSDT"
+    
+    analyze(symbol)
+
+# Çalıştır
+main()
